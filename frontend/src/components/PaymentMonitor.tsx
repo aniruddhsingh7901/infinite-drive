@@ -1,8 +1,7 @@
-// src/components/PaymentMonitor.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CryptoPayment, checkPaymentStatus, formatCryptoAmount } from '@/services/crypto'
+import { CryptoPayment, checkPaymentStatus } from '@/services/crypto-payment';
 
 interface PaymentMonitorProps {
   payment: CryptoPayment;
@@ -58,12 +57,12 @@ export default function PaymentMonitor({ payment, onSuccess, onFailure }: Paymen
       
       <div className="space-y-4">
         <div>
-          <label className="block text-sm text-gray-600">Send exactly:</label>
+          <label className="block text-sm text-gray-600">Amount:</label>
           <p className="text-2xl font-bold">{payment.amount} {payment.currency}</p>
         </div>
 
         <div>
-          <label className="block text-sm text-gray-600">To address:</label>
+          <label className="block text-sm text-gray-600">Address:</label>
           <div className="flex items-center gap-2">
             <input
               type="text"

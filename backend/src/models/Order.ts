@@ -13,15 +13,15 @@ const orderSchema = new mongoose.Schema({
     required: true
   },
   amount: { type: Number, required: true },
-  paymentChargeId: String,
   paymentStatus: {
     type: String,
     enum: ['pending', 'completed', 'failed'],
     default: 'pending'
   },
+  paymentChargeId: String,
   downloadLink: String,
-  downloadExpiry: Date,
   downloads: { type: Number, default: 0 },
+  downloadExpiry: Date,
   createdAt: { type: Date, default: Date.now }
 });
 

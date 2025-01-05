@@ -1,37 +1,57 @@
 import { Request, Response } from 'express';
-import { CoinbaseService } from '../services/coinbaseService';
-import { EmailService } from '../services/emailService';
-import { StorageService } from '../services/storageService';
+import { PaymentService } from '../services/paymentService';
 import { Order } from '../models/Order';
 import { Book } from '../models/Book';
 
-const coinbaseService = new CoinbaseService();
-const emailService = new EmailService();
-const storageService = new StorageService();
+// Add interface for populated Order
+import { Document } from 'mongoose';
+
+interface PopulatedOrder extends Document {
+  _id: string;
+  bookId: {
+    _id: string;
+    title: string;
+    price: number;
+    // other book fields you need
+  };
+  customerEmail: string;
+  amount: number;
+  paymentStatus: string;
+  paymentChargeId?: string;
+}
+
+const paymentService = new PaymentService();
 
 export const paymentController = {
   createPayment: async (req: Request, res: Response) => {
     try {
-      const { orderId } = req.body;
-      const order = await Order.findById(orderId).populate<{ bookId: typeof Book }>('bookId').lean();
-      
+      const { orderId } = req.params;
+      const order = await Order.findById(orderId)
+        .populate<PopulatedOrder>('bookId')
+        .exec();
+
       if (!order) {
         return res.status(404).json({ error: 'Order not found' });
       }
 
-      const charge = await coinbaseService.createCharge({
-        id: order._id,
+      const payment = await paymentService.createPayment({
+        orderId: order._id.toString(),
         amount: order.amount,
         customerEmail: order.customerEmail,
-        bookTitle: (order.bookId as any).title
+        bookTitle: order.bookId.title // Now TypeScript knows title exists
       });
+
+      if (!payment.success) {
+        return res.status(500).json({ error: payment.error });
+      }
 
       await Order.findByIdAndUpdate(orderId, {
-        paymentChargeId: charge.id
+        paymentChargeId: payment.chargeId
       });
 
-      res.json({ paymentUrl: charge.hosted_url });
+      res.json({ paymentUrl: payment.paymentUrl });
     } catch (error) {
+      console.error('Payment creation error:', error);
       res.status(500).json({ error: 'Payment creation failed' });
     }
   },
@@ -39,39 +59,44 @@ export const paymentController = {
   handleWebhook: async (req: Request, res: Response) => {
     try {
       const signature = req.headers['x-cc-webhook-signature'] as string;
-      
-      if (!coinbaseService.validateWebhook(JSON.stringify(req.body), signature)) {
-        return res.status(400).json({ error: 'Invalid webhook signature' });
+      const rawBody = JSON.stringify(req.body);
+
+      if (!signature) {
+        return res.status(400).json({ error: 'No signature provided' });
       }
 
-      const event = req.body;
-      const { orderId, customerEmail } = event.data.metadata;
-
-      if (event.type === 'charge:confirmed') {
-        const order = await Order.findById(orderId).populate('bookId').lean();
-        if (!order) return res.sendStatus(404);
-
-        const downloadLink = await storageService.generateDownloadLink(
-          ((order.bookId as any).fileKeys[order.format])
-        );
-
-        await Order.findByIdAndUpdate(orderId, {
-          paymentStatus: 'completed',
-          downloadLink,
-          downloadExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-        });
-
-        await emailService.sendDownloadLink(
-          customerEmail,
-          downloadLink,
-          '24 hours'
-        );
+      const isValid = paymentService.validateSignature(signature, rawBody);
+      if (!isValid) {
+        return res.status(400).json({ error: 'Invalid signature' });
       }
 
-      res.sendStatus(200);
+      const success = await paymentService.handleWebhook(rawBody, signature);
+      if (!success) {
+        return res.status(400).json({ error: 'Webhook processing failed' });
+      }
+
+      res.json({ success: true });
     } catch (error) {
       console.error('Webhook error:', error);
-      res.sendStatus(500);
+      res.status(500).json({ error: 'Webhook processing failed' });
+    }
+  },
+
+  checkPaymentStatus: async (req: Request, res: Response) => {
+    try {
+      const { orderId } = req.params;
+      
+      const order = await Order.findById(orderId);
+      if (!order) {
+        return res.status(404).json({ error: 'Order not found' });
+      }
+
+      res.json({
+        status: order.paymentStatus,
+        chargeId: order.paymentChargeId
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to check payment status' });
     }
   }
 };

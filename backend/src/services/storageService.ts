@@ -1,5 +1,4 @@
 import { S3 } from 'aws-sdk';
-import crypto from 'crypto';
 
 export class StorageService {
   private s3: S3;
@@ -12,22 +11,37 @@ export class StorageService {
     });
   }
 
-  async generateDownloadLink(fileKey: string): Promise<string> {
+  async generateDownloadLink(fileKey: string, expirySeconds: number): Promise<string> {
     const params = {
       Bucket: process.env.AWS_BUCKET_NAME!,
       Key: fileKey,
-      Expires: 3600 // 1 hour
+      Expires: expirySeconds
     };
 
-    return this.s3.getSignedUrl('getObject', params);
+    return await this.s3.getSignedUrlPromise('getObject', params);
   }
 
   async deleteFile(fileKey: string): Promise<void> {
-    const params = {
-      Bucket: process.env.AWS_BUCKET_NAME!,
-      Key: fileKey
-    };
+    try {
+      const params = {
+        Bucket: process.env.AWS_BUCKET_NAME!,
+        Key: fileKey
+      };
 
-    await this.s3.deleteObject(params).promise();
+      await this.s3.deleteObject(params).promise();
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      throw new Error('Failed to delete file');
+    }
+  }
+
+  async deleteFiles(fileKeys: string[]): Promise<void> {
+    try {
+      const deletePromises = fileKeys.map(fileKey => this.deleteFile(fileKey));
+      await Promise.all(deletePromises);
+    } catch (error) {
+      console.error('Error deleting files:', error);
+      throw new Error('Failed to delete files');
+    }
   }
 }
