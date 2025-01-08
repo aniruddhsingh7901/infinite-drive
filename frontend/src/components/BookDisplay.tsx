@@ -1,22 +1,52 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Button from './Button';
 import { useCart } from '@/lib/cart/CartContext';
+import 'slick-carousel/slick/slick.css';
+import 'slick-carousel/slick/slick-theme.css';
+import axios from 'axios';
 
 type Book = {
+  id: string;
   title: string;
   description: string;
   price: number;
-  originalPrice?: number;
-}
+  formats: string[];
+  coverImagePaths: string[];
+  filePaths: { [key: string]: string };
+};
 
-export default function BookDisplay({ book }: { book: Book }) {
+export default function BookDisplay({ bookId }: { bookId: string }) {
   const [isHovered, setIsHovered] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<'PDF' | 'EPUB'>('PDF');
   const [showAddedMessage, setShowAddedMessage] = useState(false);
+  const [currentImage, setCurrentImage] = useState(0);
+  const [book, setBook] = useState<Book | null>(null);
   const { addItem } = useCart();
+
+  useEffect(() => {
+    const fetchBook = async () => {
+      try {
+        const response = await axios.get(`http://localhost:5000/books/${bookId}`);
+        const fetchedBook = response.data;
+
+        // Ensure price is a number
+        fetchedBook.price = parseFloat(fetchedBook.price);
+
+        setBook(fetchedBook);
+      } catch (error) {
+        console.error('Error fetching book:', error);
+      }
+    };
+
+    fetchBook();
+  }, [bookId]);
+
+  if (!book) {
+    return <div>Loading...</div>;
+  }
 
   const handleAddToCart = () => {
     addItem({
@@ -31,6 +61,17 @@ export default function BookDisplay({ book }: { book: Book }) {
     setTimeout(() => setShowAddedMessage(false), 2000);
   };
 
+  const handlePrevImage = () => {
+    setCurrentImage((prevImage) => (prevImage - 1 + book.coverImagePaths.length) % book.coverImagePaths.length);
+  };
+
+  const handleNextImage = () => {
+    setCurrentImage((prevImage) => (prevImage + 1) % book.coverImagePaths.length);
+  };
+
+  const coverImageUrl = book.coverImagePaths[currentImage];
+  const ebookImageUrl = book.coverImagePaths[currentImage];
+
   return (
     <div className="bg-white p-8">
       <div className="flex flex-col md:flex-row gap-16">
@@ -42,16 +83,18 @@ export default function BookDisplay({ book }: { book: Book }) {
             onMouseLeave={() => setIsHovered(false)}
           >
             {/* White Book */}
-            <div className={`
-              absolute transition-all duration-500 transform
-              ${isHovered ? 'translate-x-[-30px] rotate-[-5deg]' : 'translate-x-[-15px]'}
-            `}>
+            <div 
+              className={`
+                absolute transition-all duration-500 transform z-10
+                ${isHovered ? 'translate-x-[-40px] translate-y-[20px] rotate-[-5deg]' : 'translate-x-[-20px] translate-y-0'}
+              `}
+            >
               <Image
-                src="/1000163335.jpg"
-                alt="White Book"
+                src={coverImageUrl}
+                alt="Book Cover"
                 width={350}
                 height={500}
-                className="object-contain drop-shadow-xl"
+                className="object-contain drop-shadow-xl cursor-pointer"
                 priority
                 style={{
                   filter: 'brightness(1.05)'
@@ -60,19 +103,35 @@ export default function BookDisplay({ book }: { book: Book }) {
             </div>
 
             {/* Dark Book */}
-            <div className={`
-              absolute transition-all duration-500 transform
-              ${isHovered ? 'translate-x-[30px] rotate-[5deg]' : 'translate-x-[15px]'}
-            `}>
+            <div 
+              className={`
+                absolute transition-all duration-500 transform z-0
+                ${isHovered ? 'translate-x-[40px] translate-y-[-20px] rotate-[5deg]' : 'translate-x-[20px] translate-y-0'}
+              `}
+            >
               <Image
-                src="/1000163401.jpg"
-                alt="Dark Book"
+                src={ebookImageUrl}
+                alt="Book Image"
                 width={350}
                 height={500}
-                className="object-contain drop-shadow-2xl"
+                className="object-contain drop-shadow-2xl cursor-pointer"
                 priority
               />
             </div>
+
+            {/* Navigation Buttons */}
+            <button
+              className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-gray-800 bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75"
+              onClick={handlePrevImage}
+            >
+              &lt;
+            </button>
+            <button
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-gray-800 bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75"
+              onClick={handleNextImage}
+            >
+              &gt;
+            </button>
           </div>
         </div>
 
@@ -87,7 +146,7 @@ export default function BookDisplay({ book }: { book: Book }) {
           <div>
             <h3 className="text-lg font-semibold mb-3">Select Format:</h3>
             <div className="flex gap-4">
-              {['PDF', 'EPUB'].map((format) => (
+              {book.formats.map((format) => (
                 <button
                   key={format}
                   onClick={() => setSelectedFormat(format as 'PDF' | 'EPUB')}
@@ -106,11 +165,6 @@ export default function BookDisplay({ book }: { book: Book }) {
           {/* Pricing */}
           <div className="flex items-center gap-4">
             <span className="text-5xl font-bold text-gray-900">${book.price.toFixed(2)}</span>
-            {book.originalPrice && (
-              <span className="text-xl text-gray-400 line-through self-start mt-2">
-                ${book.originalPrice.toFixed(2)}
-              </span>
-            )}
           </div>
 
           {/* Features */}

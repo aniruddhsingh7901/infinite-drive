@@ -1,46 +1,14 @@
-// 'use client';
-
-// import { useState } from 'react';
-// import Button from '@/components/Button';
-
-// export default function AdminBooks() {
-//   const [books, setBooks] = useState([]);
-
-//   return (
-//     <div>
-//       <div className="flex justify-between items-center mb-6">
-//         <h1 className="text-2xl font-bold">Books Management</h1>
-//         <Button>Add New Book</Button>
-//       </div>
-
-//       <div className="bg-white rounded-lg shadow overflow-hidden">
-//         <table className="min-w-full">
-//           <thead>
-//             <tr className="bg-gray-50">
-//               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-//               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-//               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sales</th>
-//               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-//             </tr>
-//           </thead>
-//           <tbody className="bg-white divide-y divide-gray-200">
-//             {/* Add book rows here */}
-//           </tbody>
-//         </table>
-//       </div>
-//     </div>
-//   );
-// }
-
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import Button from '@/components/Button';
 import Link from 'next/link';
 
 interface Book {
   id: string;
   title: string;
+  description: string;
   price: number;
   sales: number;
   formats: string[];
@@ -48,16 +16,67 @@ interface Book {
 }
 
 export default function BooksManagement() {
-  const [books, setBooks] = useState<Book[]>([
-    {
-      id: '1',
-      title: 'Infinite Drive',
-      price: 49.99,
-      sales: 150,
-      formats: ['PDF', 'EPUB'],
-      status: 'active'
+  const [books, setBooks] = useState<Book[]>([]);
+  const [editingBook, setEditingBook] = useState<Book | null>(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    price: '',
+    formats: ['PDF'],
+    status: 'active',
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchBooks = async () => {
+      try {
+        const response = await axios.get('http://localhost:5000/books');
+        setBooks(response.data);
+      } catch (error) {
+        console.error('Error fetching books:', error);
+      }
+    };
+
+    fetchBooks();
+  }, []);
+
+  const handleEdit = (book: Book) => {
+    setEditingBook(book);
+    setFormData({
+      title: book.title,
+      description: book.description,
+      price: book.price.toString(),
+      formats: book.formats,
+      status: book.status,
+    });
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await axios.delete(`http://localhost:5000/books/${id}`);
+      setBooks(books.filter(book => book.id !== id));
+    } catch (error) {
+      console.error('Error deleting book:', error);
     }
-  ]);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBook) return;
+
+    setLoading(true);
+
+    try {
+      const response = await axios.put(`http://localhost:5000/books/${editingBook.id}`, formData);
+      console.log('Book updated:', response.data);
+      setBooks(books.map(book => (book.id === editingBook.id ? response.data.book : book)));
+      setEditingBook(null);
+    } catch (error) {
+      console.error('Error updating book:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -143,8 +162,18 @@ export default function BooksManagement() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex space-x-3">
-                    <button className="text-blue-600 hover:text-blue-900">Edit</button>
-                    <button className="text-red-600 hover:text-red-900">Delete</button>
+                    <button 
+                      className="text-blue-600 hover:text-blue-900"
+                      onClick={() => handleEdit(book)}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      className="text-red-600 hover:text-red-900"
+                      onClick={() => handleDelete(book.id)}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -152,6 +181,113 @@ export default function BooksManagement() {
           </tbody>
         </table>
       </div>
+
+      {/* Edit Book Modal */}
+      {editingBook && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow p-6 w-full max-w-lg">
+            <h2 className="text-2xl font-bold mb-6">Edit Book</h2>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Available Formats
+                  </label>
+                  <div className="flex gap-4">
+                    {['PDF', 'EPUB'].map((format) => (
+                      <label key={format} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.formats.includes(format as 'PDF' | 'EPUB')}
+                          onChange={(e) => {
+                            const newFormats = e.target.checked
+                              ? [...formData.formats, format as 'PDF' | 'EPUB']
+                              : formData.formats.filter(f => f !== format);
+                            setFormData({ ...formData, formats: newFormats });
+                          }}
+                          className="mr-2"
+                        />
+                        {format}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-4 pt-4">
+                <Button
+                  type="button"
+                  className="bg-gray-500 hover:bg-gray-600"
+                  onClick={() => setEditingBook(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className={loading ? 'opacity-50 cursor-not-allowed' : ''}
+                >
+                  {loading ? 'Updating Book...' : 'Update Book'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
