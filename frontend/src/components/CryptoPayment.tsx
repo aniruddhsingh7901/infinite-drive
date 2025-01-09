@@ -1,125 +1,169 @@
+'use client';
+
 import { useState, useEffect } from 'react';
-import QRCode from 'qr-code-styling';
 import { useRouter } from 'next/navigation';
+import QRCode from 'qrcode';
 
 interface CryptoPaymentProps {
   orderId: string;
   currency: string;
   address: string;
   amount: number;
-  expiresIn: number; // in seconds
+  expiresIn: number;
+  onPaymentProcess: (data: any) => void;
 }
 
-export default function CryptoPayment({ orderId, currency, address, amount, expiresIn }: CryptoPaymentProps) {
-  const [timeLeft, setTimeLeft] = useState(expiresIn);
-  const [status, setStatus] = useState<'pending' | 'completed' | 'failed'>('pending');
+export default function CryptoPayment({
+  orderId,
+  currency,
+  address,
+  amount,
+  expiresIn,
+  onPaymentProcess
+}: CryptoPaymentProps) {
+  const [timeRemaining, setTimeRemaining] = useState(expiresIn);
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'completed' | 'failed'>('pending');
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const router = useRouter();
 
   useEffect(() => {
-    // Generate QR Code
-    const qr = new QRCode({
-      width: 300,
-      height: 300,
-      data: `${currency.toLowerCase()}:${address}?amount=${amount}`,
-      dotsOptions: { color: '#2563eb', type: 'rounded' },
-      backgroundOptions: { color: '#ffffff' },
-      imageOptions: { hideBackgroundDots: true, imageSize: 0.4, margin: 0 }
-    });
+    generateQRCode();
+    startCountdown();
+    startPaymentCheck();
+  }, [orderId]);
 
-    const container = document.getElementById('qrcode');
-    if (container) {
-      container.innerHTML = '';
-      qr.append(container);
+  const generateQRCode = async () => {
+    try {
+      // Format BTC payment URI
+      const btcUri = `bitcoin:${address}?amount=${amount.toFixed(8)}`;
+      // Generate QR code as data URL
+      const qrUrl = await QRCode.toDataURL(btcUri, {
+        width: 250,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      });
+      setQrCodeUrl(qrUrl);
+    } catch (error) {
+      console.error('QR code generation failed:', error);
     }
+  };
 
-    // Start countdown timer
+  const startCountdown = () => {
     const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
+      setTimeRemaining((prev) => {
+        if (prev <= 0) {
           clearInterval(timer);
+          router.push('/payments/status?status=failed&reason=timeout');
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
+    return timer;
+  };
 
-    // Check payment status
-    const checkStatus = setInterval(async () => {
+  const startPaymentCheck = () => {
+    const statusCheck = setInterval(async () => {
       try {
-        const response = await fetch(`/api/payments/status/${orderId}`);
+        const response = await fetch(`http://localhost:5000/payment/check/${orderId}`, {
+          credentials: 'include'
+        });
         const data = await response.json();
 
-        if (data.status === 'completed') {
-          setStatus('completed');
-          clearInterval(checkStatus);
-          setTimeout(() => {
-            router.push(`/download?token=${data.downloadToken}`);
-          }, 3000);
+        if (data.success) {
+          if (data.status === 'completed') {
+            setPaymentStatus('completed');
+            router.push(`/payments/status?status=success&orderId=${orderId}`);
+          } else if (data.status === 'failed') {
+            setPaymentStatus('failed');
+            router.push('/payments/status?status=failed');
+          }
         }
       } catch (error) {
-        console.error('Failed to check payment status:', error);
+        console.error('Payment status check failed:', error);
       }
     }, 10000);
+    return statusCheck;
+  };
 
-    return () => {
-      clearInterval(timer);
-      clearInterval(checkStatus);
-    };
-  }, [orderId, currency, address, amount]);
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Could add a tooltip or notification here to show successful copy
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-xl shadow-lg">
-      <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Complete Payment</h2>
-        <p className="text-gray-600">Send exactly {amount} {currency}</p>
+    <div className="max-w-lg mx-auto bg-white rounded-lg shadow-lg p-8">
+      <h2 className="text-2xl font-bold text-center mb-6">Complete Payment</h2>
+
+      <div className="text-center mb-8">
+        <p className="text-gray-600">Send exactly</p>
+        <p className="text-3xl font-bold my-2">
+          {amount.toFixed(8)} {currency}
+        </p>
+        <p className="text-gray-600">Time remaining: {formatTime(timeRemaining)}</p>
       </div>
 
-      {/* QR Code */}
-      <div className="bg-gray-50 p-4 rounded-lg mb-6">
-        <div id="qrcode" className="flex justify-center" />
+      <div className="flex justify-center mb-8">
+        {qrCodeUrl && (
+          <img
+            src={qrCodeUrl}
+            alt="Payment QR Code"
+            className="rounded-lg shadow-md"
+            width={250}
+            height={250}
+          />
+        )}
       </div>
 
-      {/* Payment Details */}
       <div className="space-y-4">
         <div>
-          <label className="block text-sm text-gray-600">Send To Address:</label>
-          <div className="flex items-center gap-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Send To Address:
+          </label>
+          <div className="flex items-center">
             <input
               type="text"
               value={address}
               readOnly
-              className="w-full p-2 bg-gray-50 rounded border font-mono text-sm"
+              className="flex-1 p-3 bg-gray-50 rounded-l border"
             />
             <button
-              onClick={() => navigator.clipboard.writeText(address)}
-              className="p-2 text-blue-600 hover:text-blue-700"
+              onClick={() => copyToClipboard(address)}
+              className="px-4 py-3 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition-colors"
             >
               Copy
             </button>
           </div>
         </div>
 
-        {/* Timer */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">Time Remaining:</span>
-          <span className="font-mono text-lg">
-            {minutes}:{seconds.toString().padStart(2, '0')}
-          </span>
-        </div>
-
-        {/* Status */}
-        <div className="flex items-center gap-2 mt-4">
-          <div className={`w-2 h-2 rounded-full ${
-            status === 'pending' ? 'bg-yellow-400' :
-            status === 'completed' ? 'bg-green-400' : 'bg-red-400'
-          }`} />
-          <span className="text-sm text-gray-600">
-            {status === 'pending' ? 'Waiting for payment...' :
-             status === 'completed' ? 'Payment confirmed!' : 'Payment failed'}
-          </span>
+        <div className="mt-6">
+          <div className="flex items-center justify-center gap-2">
+            <div
+              className={`w-3 h-3 rounded-full ${
+                paymentStatus === 'pending' ? 'bg-yellow-500' :
+                paymentStatus === 'completed' ? 'bg-green-500' :
+                'bg-red-500'
+              }`}
+            />
+            <span className="text-sm font-medium">
+              {paymentStatus === 'pending' ? 'Waiting for payment...' :
+               paymentStatus === 'completed' ? 'Payment completed!' :
+               'Payment failed'}
+            </span>
+          </div>
         </div>
       </div>
     </div>

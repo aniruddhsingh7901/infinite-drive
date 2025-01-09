@@ -7,7 +7,7 @@ const router = Router();
 router.post('/add', addBook);
 router.get('/', getBooks);
 router.get('/:id', getBookById);
-router.put('/:id', updateBook); // Add this line to create the PUT endpoint
+router.put('/:id', updateBook);
 router.delete('/:id', deleteBook);
 
 export default router;

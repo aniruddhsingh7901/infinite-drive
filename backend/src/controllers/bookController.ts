@@ -208,9 +208,83 @@ export const getBooks = async (req: Request, res: Response, next: NextFunction):
 //     }
 // };
 
+// export const getBookById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+//     try {
+//         const { id } = req.params;
+//         console.log('Looking for book with ID:', id);
+
+//         if (!id) {
+//             console.log('No ID provided');
+//             res.status(400).json({ message: 'Book ID is required' });
+//             return;
+//         }
+
+//         const book = await Book.findByPk(id, {
+//             attributes: [
+//                 'id',
+//                 'title',
+//                 'description',
+//                 'price',
+//                 'formats',
+//                 'filePaths',
+//                 'coverImagePaths',
+//                 'status'
+//             ]
+//         });
+
+//         console.log('Database query result:', book);
+
+//         if (!book) {
+//             console.log('Book not found for ID:', id);
+//             res.status(404).json({
+//                 message: 'Book not found',
+//                 requestedId: id
+//             });
+//             return;
+//         }
+
+//         // Validate book data before sending
+//         if (!book.formats || !book.coverImagePaths) {
+//             console.error('Invalid book data:', book);
+//             res.status(500).json({
+//                 message: 'Invalid book data structure',
+//                 details: 'Missing required fields'
+//             });
+//             return;
+//         }
+
+//         const bookData = {
+//             id: book.id,
+//             title: book.title,
+//             description: book.description,
+//             price: parseFloat(book.price.toString()),
+//             formats: book.formats,
+//             filePaths: book.filePaths,
+//             coverImagePaths: book.coverImagePaths,
+//             status: book.status
+//         };
+
+//         console.log('Sending book data:', bookData);
+//         res.status(200).json(bookData);
+
+//     } catch (error) {
+//         console.error('Error in getBookById:', error);
+//         if (error instanceof Error) {
+//             res.status(500).json({
+//                 message: 'Error fetching book',
+//                 error: error.message
+//             });
+//         } else {
+//             res.status(500).json({
+//                 message: 'Unknown error occurred'
+//             });
+//         }
+//     }
+// };
+
 export const getBookById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = decodeURIComponent(req.params.id);
         console.log('Looking for book with ID:', id);
 
         if (!id) {
@@ -219,7 +293,8 @@ export const getBookById = async (req: Request, res: Response, next: NextFunctio
             return;
         }
 
-        const book = await Book.findByPk(id, {
+        const book = await Book.findOne({
+            where: { id: id },
             attributes: [
                 'id',
                 'title',
@@ -272,11 +347,13 @@ export const getBookById = async (req: Request, res: Response, next: NextFunctio
         if (error instanceof Error) {
             res.status(500).json({
                 message: 'Error fetching book',
-                error: error.message
+                error: error.message,
+                details: 'Database query failed'
             });
         } else {
             res.status(500).json({
-                message: 'Unknown error occurred'
+                message: 'Unknown error occurred',
+                details: 'Unexpected error type'
             });
         }
     }
