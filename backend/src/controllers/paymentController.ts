@@ -5,6 +5,7 @@ import { BlockchainService } from '../services/blockchainService';
 import { Book } from '../models';
 import { CryptoService } from '../services/cryptoService';
 // import { CRYPTO_CONFIG } from '../config/cryptoConfig';
+import { DownloadController } from './downloadController';
 
 
 // Extend Express Request
@@ -17,39 +18,9 @@ declare global {
         }
     }
 }
-import { DownloadService } from '../services/downloadService';
+
 import EmailService from '../services/emailService';
 import { PaymentService } from '../services/paymentService';
-
-interface CreatePaymentRequest {
-    email: string;
-    cryptocurrency: string;
-    amount: number;
-    bookId: string;
-}
-
-interface PaymentResponse {
-    success: boolean;
-    error?: string;
-    details?: string;
-    orderId?: string;
-    paymentAddress?: string;
-    amount?: string;
-    currency?: string;
-    qrCodeData?: QRCodeData;
-    networkFee?: string;
-    waitTime?: string;
-    minConfirmations?: number;
-    instructions?: string;
-    explorerUrl?: string;
-}
-
-interface QRCodeData {
-    uri: string;
-    amount: string;
-    label: string;
-    message: string;
-}
 
 interface PaymentVerificationResult {
     verified: boolean;
@@ -64,24 +35,14 @@ interface PaymentVerificationResult {
     downloadToken?: string;
 }
 
-interface VerificationResult {
-    verified: boolean;
-    txHash?: string;
-    amount?: number;
-    confirmations?: number;
-    explorerUrl?: string;
-    message?: string;
-    completedAt?: Date;
-    downloadToken?: string;
-}
-
 export class PaymentController {
     constructor(
         private cryptoService: CryptoService = new CryptoService(),
         private blockchain: BlockchainService,
-        private download: DownloadService,
+        private download: DownloadController,
         private email: typeof EmailService,
         private payment: PaymentService
+        
     ) { }
 
     // async createPayment(req: Request<{}, {}, CreatePaymentRequest>, res: Response<PaymentResponse>): Promise<void> {
@@ -170,7 +131,7 @@ export class PaymentController {
     // src/controllers/paymentController.ts
     async createPayment(req: Request, res: Response): Promise<void> {
         try {
-            const { email, cryptocurrency, amount, bookId } = req.body;
+            const { email, cryptocurrency, amount, bookId, format} = req.body;
             console.log("🚀 ~ PaymentController ~ createPayment ~ req.body:", req.body)
 
             // Create payment and generate QR code
@@ -187,7 +148,7 @@ export class PaymentController {
                 bookId,
                 email,
                 amount: cryptoAmount,
-                format: 'digital',
+                format,
                 payment_currency: cryptocurrency,
                 payment_address: payment_address,
                 status: 'pending',
@@ -227,6 +188,7 @@ export class PaymentController {
     async checkPayment(req: Request<{ orderId: string }>, res: Response): Promise<void> {
         try {
             const order = await Order.findByPk(req.params.orderId);
+            console.log("🚀 ~ PaymentController ~ checkPayment ~ order:", req.params.orderId)
             if (!order) {
                 res.status(404).json({ success: false, error: 'Order not found' });
                 return;
@@ -237,6 +199,17 @@ export class PaymentController {
                 order.amount,
                 order.payment_address
             );
+
+            // const verification = {
+            //     verified: true,
+            //     status: 'completed',
+            //     txHash: 'test_tx_hash_' + Date.now(),
+            //     amount: order.amount,
+            //     confirmations: 6,
+            //     timestamp: Date.now(),
+            //     explorerUrl: `https://blockchain.info/tx/test_tx_hash_${Date.now()}`,
+            //     message: "completed payment"
+            // }
 
             if (verification.verified) {
                 const downloadToken = await this.handleSuccessfulPayment(order, {
@@ -302,53 +275,45 @@ export class PaymentController {
 
     private async handleSuccessfulPayment(order: Order, verification: PaymentVerificationResult): Promise<string> {
         try {
-            // 1. Get book details including file paths
             const book = await Book.findByPk(order.bookId);
-            if (!book) {
-                throw new Error('Book not found');
-            }
+            if (!book) throw new Error('Book not found');
+            if (!order) throw new Error('Order not found');
 
-            // 2. Generate unique download token
-            const downloadToken = uuidv4();
-            const expiresAt = new Date();
-            expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour expiry
+            // Generate download token
+            const downloadTokenObj = await this.download.generateDownloadToken(order.id);
+            const downloadToken = downloadTokenObj.get('token');
 
-            // 3. Update order with payment and download details
+            // Get selected format from order
+            const format = order.format.toLowerCase();
+
+            // Generate format-specific download link
+            const downloadLink = `${process.env.API_URL}/download/${downloadToken}?format=${format}`;
+
+            console.log("🚀 ~ handleSuccessfulPayment ~ downloadLink:", downloadLink)
+            // Update order
             await Order.update({
                 status: 'completed',
-                tx_hash: verification.txHash,
-                paid_amount: verification.amount,
                 downloadToken,
-                downloadExpiresAt: expiresAt
+                downloadLink,
+                txHash: verification.txHash,
+                completedAt: new Date(verification.timestamp || Date.now())
             }, {
                 where: { id: order.id }
             });
 
-            // 4. Generate download links for both formats
-            const downloadLinks = {
-                pdf: `${process.env.API_URL}/download/${downloadToken}?format=pdf`,
-                epub: `${process.env.API_URL}/download/${downloadToken}?format=epub`
-            };
-
-            // 5. Send email with download links
+            // Send email with format-specific link
             const emailBody = `
             Thank you for your purchase!
             
-            Your download links (valid for 24 hours):
-            
-            PDF Version: ${downloadLinks.pdf}
-            EPUB Version: ${downloadLinks.epub}
+            Your download link (valid for 24 hours):
+            ${format.toUpperCase()} Version: ${downloadLink}
             
             Transaction Hash: ${verification.txHash}
             
-            Note: Each link can only be used once.
+            Note: This link can only be used once.
         `;
 
-            await this.email.sendEmail(
-                order.email,
-                'Your Book Download Links',
-                emailBody
-            );
+            await this.email.sendEmail(order.email, 'Your Book Download Link', emailBody);
 
             return downloadToken;
 
@@ -362,9 +327,9 @@ export class PaymentController {
 export default new PaymentController(
     new CryptoService(),
     new BlockchainService(),
-    new DownloadService(),
+    new DownloadController(),
     EmailService,
     new PaymentService(),
-    
+   
   
 );

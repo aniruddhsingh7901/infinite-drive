@@ -137,6 +137,7 @@ export default function CheckoutPage() {
     
     try {
       const book = items[0];
+      console.log("🚀 ~ handleSubmit ~ book:", book)
       const selectedCrypto = CRYPTO_PAYMENTS[formData.selectedCrypto as keyof typeof CRYPTO_PAYMENTS];
       
       console.log('Payment Request Data:', {
@@ -144,6 +145,7 @@ export default function CheckoutPage() {
         selectedCrypto: formData.selectedCrypto,
         cryptoDetails: selectedCrypto,
         bookId: book.id,
+        format:book.format,
         amount: total
       });
       
@@ -156,6 +158,7 @@ export default function CheckoutPage() {
           email: formData.email,
           cryptocurrency: selectedCrypto.apiValue,
           bookId: book.id,
+          format:book.format,
           amount: total
         })
       });

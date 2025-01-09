@@ -1,16 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 
-interface BlockchainConfig {
-    apiUrl: string;
-    apiKey: string;
-    explorerUrl: string;
-    decimals: number;
-    usdtContract?: string;
-}
 
-interface BlockchainConfigs {
-    [key: string]: BlockchainConfig;
-}
 
 interface VerificationResult {
     verified: boolean;
@@ -22,75 +12,79 @@ interface VerificationResult {
     timestamp?: number;
     explorerUrl?: string;
 }
-
-interface TonTransaction {
-    in_msg?: {
-        value: number;
-    };
-    utime: number;
-    hash: string;
+interface BlockchainConfig {
+    apiUrl: string;
+    apiKey: string;
+    explorerUrl: string;
+    decimals: number;
+    minConfirmations: number;
+    usdtContract?: string;
 }
-
-interface BtcTransaction {
-    value: number;
-    confirmations: number;
-    confirmed: string;
-    hash: string;
+interface BlockchainConfigs {
+    [key: string]: BlockchainConfig;
 }
-
-interface TronTransaction {
-    raw_data: {
-        contract: Array<{
-            type: string;
-            parameter: {
-                value: {
-                    contract_address?: string;
-                    amount: number;
-                };
-            };
-        }>;
-    };
-    txID: string;
-    block_timestamp: number;
-}
-
 export class BlockchainService {
-    private readonly config: BlockchainConfigs;
+    private readonly config: BlockchainConfigs = {
+        BTC: {
+            apiUrl: 'https://api.blockcypher.com/v1/btc/main',
+            apiKey: process.env.BLOCKCYPHER_API_TOKEN!,
+            explorerUrl: 'https://www.blockchain.com/btc/tx/',
+            decimals: 8,
+            minConfirmations: 2
+        },
+        LTC: {
+            apiUrl: 'https://api.blockcypher.com/v1/ltc/main',
+            apiKey: process.env.BLOCKCYPHER_API_TOKEN!,
+            explorerUrl: 'https://blockchair.com/litecoin/transaction/',
+            decimals: 8,
+            minConfirmations: 6
+        },
+        DOGE: {
+            apiUrl: 'https://api.blockcypher.com/v1/doge/main',
+            apiKey: process.env.BLOCKCYPHER_API_TOKEN!,
+            explorerUrl: 'https://dogechain.info/tx/',
+            decimals: 8,
+            minConfirmations: 6
+        },
+        SOL: {
+            apiUrl: 'https://api.solscan.io',
+            apiKey: process.env.SOLSCAN_API_KEY!,
+            explorerUrl: 'https://solscan.io/tx/',
+            decimals: 9,
+            minConfirmations: 1
+        },
+        USDT: {
+            apiUrl: 'https://api.trongrid.io',
+            apiKey: process.env.TRONGRID_API_KEY!,
+            explorerUrl: 'https://tronscan.org/#/transaction/',
+            decimals: 6,
+            minConfirmations: 19,
+            usdtContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+        }
+    };
 
-    constructor() {
-        this.config = {
-            ton: {
-                apiUrl: 'https://toncenter.com/api/v2',
-                apiKey: process.env.TON_API_KEY!,
-                explorerUrl: 'https://tonscan.org/tx/',
-                decimals: 9
-            },
-            // ... other configs
-        };
-    }
-
-    async verifyPayment(currency: string, orderAmount: number, paymentAddress: string): Promise<VerificationResult> {
+    async verifyPayment(currency: string, amount: number, address: string): Promise<VerificationResult> {
         try {
-            if (!currency || !orderAmount || !paymentAddress) {
-                throw new Error('Missing required payment parameters');
-            }
+            const config = this.config[currency.toUpperCase()];
+            if (!config) throw new Error(`Unsupported currency: ${currency}`);
 
-            const normalizedCurrency = currency.toUpperCase();
+            const convertedAmount = amount * Math.pow(10, config.decimals);
+            console.log("🚀 ~ BlockchainService ~ verifyPayment ~ convertedAmount:", convertedAmount)
 
-            if (isNaN(orderAmount) || orderAmount <= 0) {
-                throw new Error('Invalid order amount');
-            }
-
-            switch (normalizedCurrency) {
-                case 'TON':
-                    return this.verifyTonTransaction(orderAmount, paymentAddress);
+            switch (currency.toUpperCase()) {
                 case 'BTC':
-                    return this.verifyBitcoinTransaction(orderAmount, paymentAddress);
+                case 'LTC':
+                case 'DOGE':
+                    return await this.verifyUTXOTransaction(currency, convertedAmount, address, config);
+
+                case 'SOL':
+                    return await this.verifySolanaTransaction(convertedAmount, address, config);
+
                 case 'USDT':
-                    return this.verifyTronTransaction(orderAmount, paymentAddress, 'USDT');
-                // ... other cases
+                    return await this.verifyTronTransaction(convertedAmount, address, config);
+
                 default:
-                    throw new Error(`Unsupported cryptocurrency: ${normalizedCurrency}`);
+                    throw new Error(`Verification not implemented for ${currency}`);
             }
         } catch (error) {
             return {
@@ -101,115 +95,149 @@ export class BlockchainService {
         }
     }
 
-    private async verifyTonTransaction(orderAmount: number, paymentAddress: string): Promise<VerificationResult> {
+    private async verifyUTXOTransaction(currency: string, expectedAmount: number, expectedAddress: string, config: BlockchainConfig): Promise<VerificationResult> {
         try {
-            const response: AxiosResponse<{ result: TonTransaction[] }> = await axios.get(
-                `${this.config.ton.apiUrl}/getTransactions`,
-                {
-                    params: {
-                        address: paymentAddress,
-                        limit: 50,
-                        to_lt: 0,
-                        arch: false
-                    },
-                    headers: { 'X-API-Key': this.config.ton.apiKey }
-                }
+            const response = await axios.get(`${config.apiUrl}/addrs/${expectedAddress}/full?token=${config.apiKey}`);
+            const recentTx = response.data.txs?.[0];
+
+            if (!recentTx) {
+                return {
+                    verified: false,
+                    status: 'pending',
+                    message: 'No transactions found'
+                };
+            }
+
+            // Convert expected amount to satoshis (BTC: 1 = 100000000 satoshis)
+            const expectedSatoshis = Math.round(expectedAmount); // Fixed conversion
+            console.log("🚀 ~ BlockchainService ~ verifyUTXOTransaction ~ expectedSatoshis:", expectedSatoshis)
+
+            // Find output for our address
+            interface TransactionOutput {
+                addresses?: string[];
+                value: number;
+            }
+
+            const matchingOutput: TransactionOutput | undefined = recentTx.outputs.find((output: TransactionOutput) =>
+                output.addresses?.includes(expectedAddress)
             );
+            const receivedSatoshis = matchingOutput?.value || 0;
+            console.log("🚀 ~ BlockchainService ~ verifyUTXOTransaction ~ receivedSatoshis:", receivedSatoshis)
 
-            const matchingTx = response.data.result.find(tx =>
-                (tx.in_msg?.value || 0) >= orderAmount * Math.pow(10, this.config.ton.decimals) &&
-                Date.now() / 1000 - tx.utime < 3600
-            ) || null;
+            interface TransactionDebug {
+                expectedAmount: number;
+                expectedSatoshis: number;
+                receivedSatoshis: number;
+                expectedAddress: string;
+                outputs: Array<{
+                    value: number;
+                    addresses: string[] | undefined;
+                }>;
+            }
 
-            return this.formatVerificationResult(matchingTx, 'ton');
-        } catch (error) {
-            return this.handleVerificationError('TON');
-        }
-    }
+            interface TxOutput {
+                value: number;
+                addresses: string[] | undefined;
+            }
 
-    private async verifyBitcoinTransaction(orderAmount: number, paymentAddress: string): Promise<VerificationResult> {
-        try {
-            const response: AxiosResponse<{ result: BtcTransaction[] }> = await axios.get(
-                `${this.config.btc.apiUrl}/address/${paymentAddress}/txs`,
-                {
-                    headers: { 'X-API-Key': this.config.btc.apiKey }
-                }
-            );
+            interface TransactionDebug {
+                expectedAmount: number;
+                expectedSatoshis: number;
+                receivedSatoshis: number;
+                expectedAddress: string;
+                outputs: TxOutput[];
+            }
 
-            const matchingTx = response.data.result.find(tx =>
-                tx.value >= orderAmount * Math.pow(10, this.config.btc.decimals) &&
-                tx.confirmations > 0
-            ) || null;
+            interface TxOutput {
+                value: number;
+                addresses: string[] | undefined;
+            }
 
-            return this.formatVerificationResult(matchingTx, 'btc');
-        } catch (error) {
-            return this.handleVerificationError('BTC');
-        }
-    }
+            interface TransactionDebug {
+                expectedAmount: number;
+                expectedSatoshis: number;
+                receivedSatoshis: number;
+                expectedAddress: string;
+                outputs: TxOutput[];
+            }
 
-    private async verifyTronTransaction(orderAmount: number, paymentAddress: string, currency: string): Promise<VerificationResult> {
-        try {
-            const response: AxiosResponse<{ data: TronTransaction[] }> = await axios.get(
-                `${this.config.tron.apiUrl}/v1/accounts/${paymentAddress}/transactions`,
-                {
-                    headers: { 'TRON-PRO-API-KEY': this.config.tron.apiKey }
-                }
-            );
-
-            const matchingTx = response.data.data.find(tx =>
-                currency === 'USDT' ? this.verifyUSDTTransaction(tx, orderAmount) :
-                tx.raw_data.contract[0].parameter.value.amount / Math.pow(10, this.config.tron.decimals) >= orderAmount
-            ) || null;
-
-            return this.formatVerificationResult(matchingTx, 'tron');
-        } catch (error) {
-            return this.handleVerificationError('TRON');
-        }
-    }
-
-    private verifyUSDTTransaction(tx: TronTransaction, orderAmount: number): boolean {
-        try {
-            const contractData = tx.raw_data.contract[0];
-            return contractData.type === 'TriggerSmartContract' &&
-                contractData.parameter.value.contract_address === this.config.tron.usdtContract &&
-                contractData.parameter.value.amount / Math.pow(10, this.config.tron.decimals) >= orderAmount;
-        } catch {
-            return false;
-        }
-    }
-
-    private formatVerificationResult(transaction: TonTransaction | BtcTransaction | TronTransaction | null, network: string): VerificationResult {
-        if (!transaction) {
-            return {
-                verified: false,
-                status: 'pending',
-                message: 'No matching transaction found'
+            const debugInfo: TransactionDebug = {
+                expectedAmount,
+                expectedSatoshis,
+                receivedSatoshis,
+                expectedAddress,
+                outputs: recentTx.outputs.map((o: { value: number; addresses?: string[] }): TxOutput => ({
+                    value: o.value,
+                    addresses: o.addresses
+                }))
             };
+
+            console.log('Transaction Debug:', debugInfo);
+            console.log("🚀 ~ BlockchainService ~ verifyUTXOTransaction ~ recentTx.hash:", recentTx.hash)
+            const isVerified =
+                
+                matchingOutput !== undefined &&
+                receivedSatoshis == expectedSatoshis && // Exact match
+                recentTx.confirmations >= config.minConfirmations;
+            console.log("🚀 ~ BlockchainService ~ verifyUTXOTransaction ~ isVerified:", isVerified)
+            return {
+                verified: isVerified,
+                status: isVerified ? 'completed' : 'pending',
+                txHash: recentTx.hash,
+                amount: receivedSatoshis / 100000000, // Convert back to BTC
+                confirmations: recentTx.confirmations,
+                timestamp: new Date(recentTx.received).getTime(),
+                explorerUrl: `${config.explorerUrl}${recentTx.hash}`,
+                message: !isVerified ? `Expected ${expectedAmount} BTC (${expectedSatoshis} sats), received ${receivedSatoshis / 100000000} BTC (${receivedSatoshis} sats)` : undefined
+            };
+               
+
+        } catch (error) {
+            console.error('UTXO verification error:', error);
+            throw error;
         }
+    }
+    private async verifySolanaTransaction(amount: number, address: string, config: BlockchainConfig): Promise<VerificationResult> {
+        const response = await axios.get(`${config.apiUrl}/account/transactions`, {
+            params: { account: address },
+            headers: { 'Authorization': `Bearer ${config.apiKey}` }
+        });
+
+        const recentTx = response.data?.[0];
+        if (!recentTx) return { verified: false, status: 'pending' };
 
         return {
-            verified: true,
-            status: 'completed',
-            txHash: 'hash' in transaction ? transaction.hash : ('txID' in transaction ? transaction.txID : ''),
-            amount: 'value' in transaction ? transaction.value : 0,
-            confirmations: 'confirmations' in transaction ? transaction.confirmations : 1,
-            timestamp: 'utime' in transaction ? transaction.utime : ('block_timestamp' in transaction ? transaction.block_timestamp : 0),
-            explorerUrl: this.getExplorerUrl(network, 'hash' in transaction ? transaction.hash : ('txID' in transaction ? transaction.txID : ''))
+            verified: recentTx.confirmations >= config.minConfirmations,
+            status: recentTx.confirmations >= config.minConfirmations ? 'completed' : 'pending',
+            txHash: recentTx.signature,
+            amount: recentTx.lamports / Math.pow(10, config.decimals),
+            confirmations: recentTx.confirmations,
+            timestamp: recentTx.blockTime * 1000,
+            explorerUrl: `${config.explorerUrl}${recentTx.signature}`
         };
     }
 
-    private handleVerificationError(network: string): VerificationResult {
-        return {
-            verified: false,
-            status: 'error',
-            message: `Failed to verify ${network} transaction`
-        };
-    }
+    private async verifyTronTransaction(amount: number, address: string, config: BlockchainConfig): Promise<VerificationResult> {
+        const response = await axios.get(`${config.apiUrl}/v1/accounts/${address}/transactions/trc20`, {
+            params: {
+                contract_address: config.usdtContract,
+                only_confirmed: true,
+                limit: 1
+            },
+            headers: { 'TRON-PRO-API-KEY': config.apiKey }
+        });
 
-    getExplorerUrl(currency: string, txHash: string): string | undefined {
-        const config = this.config[currency.toLowerCase()];
-        return config ? config.explorerUrl + txHash : undefined;
+        const recentTx = response.data.data?.[0];
+        if (!recentTx) return { verified: false, status: 'pending' };
+
+        return {
+            verified: parseInt(recentTx.value) >= amount,
+            status: parseInt(recentTx.value) >= amount ? 'completed' : 'pending',
+            txHash: recentTx.transaction_id,
+            amount: parseInt(recentTx.value) / Math.pow(10, config.decimals),
+            confirmations: recentTx.confirmed ? config.minConfirmations : 0,
+            timestamp: recentTx.block_timestamp,
+            explorerUrl: `${config.explorerUrl}${recentTx.transaction_id}`
+        };
     }
 }
-
-export default new BlockchainService();

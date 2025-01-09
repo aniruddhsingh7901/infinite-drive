@@ -50,7 +50,7 @@ export default function BookDisplay({ bookId }: { bookId: string }) {
 
   const handleAddToCart = () => {
     addItem({
-      id: `${Date.now()}-${selectedFormat}`, // Unique ID including format
+      id:  "1736235798107-PDF",// Unique ID including format
       title: `${book.title} (${selectedFormat})`,
       price: book.price,
       format: selectedFormat

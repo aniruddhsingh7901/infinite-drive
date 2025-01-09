@@ -72,7 +72,8 @@ import { Request, Response, Router } from 'express';
 import PaymentController from '../controllers/paymentController';
 import paymentAuth from '../middleware/paymentMiddleware';
 import { PaymentService } from '../services/paymentService'; // Fixed import
-
+import { BlockchainService } from '../services/blockchainService';
+const blockchainService = new BlockchainService();
 // interface PaymentMethods {
 //     currency: string;
 //     name: string;
@@ -102,6 +103,38 @@ router.get('/methods', async (_req: Request, res: Response) => {
         });
     }
 });
+
+router.post('/verify-test', async (req: Request, res: Response) => {
+    try {
+        const { currency, address, amount } = req.body;
+
+        if (!currency || !address || !amount) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required parameters'
+            });
+        }
+
+        const verification = await blockchainService.verifyPayment(
+            currency,
+            parseFloat(amount),
+            address
+        );
+
+        res.json({
+            success: true,
+            verification
+        });
+
+    } catch (error) {
+        console.error('Test verification error:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Verification failed'
+        });
+    }
+});
+
 
 router.get('/address/:currency', paymentAuth, async (req: Request, res: Response) => {
     try {

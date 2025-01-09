@@ -1,51 +1,36 @@
-// import nodemailer from 'nodemailer';
+import nodemailer from 'nodemailer';
 
-// export const sendEmail = async (to: string, subject: string, body: string): Promise<void> => {
-//   const transporter = nodemailer.createTransport({
-//     service: 'gmail',
-//     auth: {
-//       user: 'brajdhakad0@gmail.com',
-//       pass: 'aptv ipfh vomv ikmi',
-//     },
-//   });
-
-//   const mailOptions = {
-//     from: 'brajdhakad0@gmail.com',
-//     to,
-//     subject,
-//     text: body,
-//   };
-
-//   await transporter.sendMail(mailOptions);
-// };
-
-import nodemailer, { Transporter } from 'nodemailer';
-
-export class EmailService {
-  public transporter: Transporter;
+class EmailService {
+  private transporter: nodemailer.Transporter;
 
   constructor() {
     this.transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
+        pass: process.env.EMAIL_PASS
       }
     });
   }
 
   public async sendDownloadLink(
     to: string,
-    downloadToken: string,
+    downloadLinks: { pdf: string; epub: string },
+    txHash: string
   ): Promise<void> {
-    const subject = 'Your Download Link';
-    const downloadUrl = `${process.env.APP_URL}/download/${downloadToken}`;
-
+    const subject = 'Your Book Download Links';
     const body = `
-     Thank you for your purchase!
-     Download link: ${downloadUrl}
-     This link will expire in 24 hours.
-   `;
+            Thank you for your purchase!
+            
+            Your download links (valid for 24 hours):
+            
+            PDF Version: ${downloadLinks.pdf}
+            EPUB Version: ${downloadLinks.epub}
+            
+            Transaction Hash: ${txHash}
+            
+            Note: Each link can only be used once.
+        `;
 
     await this.sendEmail(to, subject, body);
   }
@@ -55,14 +40,17 @@ export class EmailService {
     subject: string,
     body: string
   ): Promise<void> {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to,
-      subject,
-      text: body
-    };
-
-    await this.transporter.sendMail(mailOptions);
+    try {
+      await this.transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to,
+        subject,
+        text: body
+      });
+    } catch (error) {
+      console.error('Email sending failed:', error);
+      throw error;
+    }
   }
 }
 

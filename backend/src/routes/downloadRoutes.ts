@@ -1,9 +1,9 @@
-// src/routes/downloadRoutes.ts
 import { Router } from 'express';
-// import { downloadController } from '../controllers/downloadController';
+import { DownloadController } from '../controllers/downloadController';
 
 const router = Router();
+const downloadController = new DownloadController();
 
-// router.get('/:token', downloadController.downloadBook.bind(downloadController));
+router.get('/:token', downloadController.downloadBook);
 
 export default router;
