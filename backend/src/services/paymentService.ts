@@ -204,47 +204,6 @@ export class PaymentService {
     }
   }
 
-  // async createPayment(orderId: string, amount: number, currency: string): Promise<Order & {
-  //   qrCodeData: string;
-  //   networkFee: string;
-  //   waitTime: string;
-  //   explorerUrl: string;
-  //   minConfirmations: number;
-  // }> {
-  //   try {
-  //     const paymentAddress = await this.generatePaymentAddress(currency);
-  //     const formattedAmount = this.formatAmount(amount);
-
-  //     const query = `
-  //      UPDATE orders
-  //      SET payment_address = $1,
-  //          payment_currency = $2,
-  //          status = 'awaiting_payment',
-  //          updated_at = CURRENT_TIMESTAMP
-  //      WHERE id = $3
-  //      RETURNING *
-  //    `;
-
-  //     const [order] = await this.sequelize.query<Order>(query, {
-  //       replacements: [paymentAddress, currency, orderId],
-  //       type: QueryTypes.SELECT
-  //     });
-
-  //     const currencyConfig = this.supportedCurrencies[currency];
-  //     return {
-  //       ...order,
-  //       qrCodeData: this.formatQRCode(currency, paymentAddress, formattedAmount),
-  //       networkFee: currencyConfig.networkFee,
-  //       waitTime: currencyConfig.waitTime,
-  //       explorerUrl: currencyConfig.explorerUrl,
-  //       minConfirmations: currencyConfig.minConfirmations
-  //     };
-  //   } catch (error) {
-  //     console.error('Payment creation error:', error);
-  //     throw error;
-  //   }
-  // }
-  
   async createPayment(orderId: string, amount: number, currency: string): Promise<Order & {
     qrCodeData: string;
     networkFee: string;
@@ -304,27 +263,23 @@ export class PaymentService {
     return this.supportedCurrencies[currency]?.explorerUrl + txHash;
   }
 
-  async updatePaymentStatus(
-    orderId: string,
-    status: string,
-    txHash: string | null = null,
-    paidAmount: number | null = null
-  ): Promise<Order> {
-    const query = `
-     UPDATE orders 
-     SET status = $1,
-         tx_hash = COALESCE($2, tx_hash),
-         paid_amount = COALESCE($3, paid_amount),
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id = $4
-     RETURNING *
-   `;
-    const [result] = await this.sequelize.query<Order>(query, {
-      replacements: [status, txHash, paidAmount, orderId],
-      type: QueryTypes.SELECT
-    });
-    return result;
-  }
+  // async checkPayment(orderId: string): Promise<VerificationResult> {
+  //   try {
+  //     const order = await this.sequelize.models.Order.findByPk(orderId);
+  //     if (!order) {
+  //       throw new Error('Order not found');
+  //     }
+
+  //     return await this.verifyPayment(order.payment_address, order.paid_amount || 0, order.payment_currency);
+
+  //   } catch (error) {
+  //     console.error('Payment verification error:', error);
+  //     return {
+  //       verified: false,
+  //       message: error instanceof Error ? error.message : 'Payment verification failed'
+  //     };
+  //   }
+  // }
 }
 
 export default new PaymentService();

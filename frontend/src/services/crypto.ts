@@ -125,8 +125,18 @@ export interface CryptoPayment {
   status: 'pending' | 'completed' | 'failed';
   timeoutAt: number;
 }
+interface PaymentStatusResponse {
 
-export async function checkPaymentStatus(orderId: string): Promise<string> {
+  status: 'pending' | 'confirming' | 'completed';
+
+  txHash: string;
+
+  downloadLink: string;
+
+}
+
+
+export async function checkPaymentStatus(orderId: string): Promise<PaymentStatusResponse>{
   const response = await fetch(`http://localhost:5000/payment/check/${orderId}`);
   const data = await response.json();
   console.log("🚀 ~ checkPaymentStatus ~ data:", data)

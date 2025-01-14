@@ -5,11 +5,13 @@ import CryptoPayment from '@/components/CryptoPayment';
 
 export default function PaymentProcessPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
+  // const router = useRouter();
   
   const orderId = searchParams.get('orderId') || '';
   const currency = searchParams.get('currency') || '';
   const address = searchParams.get('address') || '';
+  const qrData = searchParams.get('qrData') || '';
+  console.log("🚀 ~ PaymentProcessPage ~ qrData:", qrData)
   const amount = parseFloat(searchParams.get('amount') || '0');
 
   return (
@@ -19,7 +21,9 @@ export default function PaymentProcessPage() {
         currency={currency}
         address={address}
         amount={amount}
-        expiresIn={1800} // 30 minutes
+        qrData= {qrData}
+        expiresIn={3600} // 30 minutes
+      
       />
     </div>
   );

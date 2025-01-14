@@ -219,6 +219,7 @@ class Order extends Model {
     declare format: string;
     declare status: string;
     declare email: string;
+    declare txHash: string | null;
     declare amount: number;
     declare payment_currency: string;
     declare payment_address: string;
@@ -267,6 +268,10 @@ Order.init(
             validate: {
                 isEmail: true
             }
+        },
+        txHash: {
+            type: DataTypes.STRING,
+            allowNull: true
         },
         amount: {
             type: DataTypes.DECIMAL(20, 8),

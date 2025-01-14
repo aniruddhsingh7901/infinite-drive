@@ -164,7 +164,7 @@ export default function CheckoutPage() {
       });
   
       const responseText = await response.text();
-      console.log('Raw API Response:', responseText);
+       console.log('Raw API Response:', responseText);
       
       let data;
       try {
@@ -179,7 +179,7 @@ export default function CheckoutPage() {
         throw new Error(data.error || 'Payment initialization failed');
       }
   
-      router.push(`/payments/process?orderId=${data.orderId}&address=${data.paymentAddress}&amount=${data.amount}&currency=${data.currency}`);
+      router.push(`/payments/process?orderId=${data.orderId}&address=${data.paymentAddress}&qrData=${data.qrCodeData}&amount=${data.amount}&currency=${data.currency}`);
   
     } catch (err) {
       console.error('Payment Error:', err);
