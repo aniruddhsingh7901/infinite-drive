@@ -1,7 +1,7 @@
 import sequelize from '../config/database';
 import User from './userModel';
 import Book from './Book';
-import Cart from './cartModel';
+// import Cart from './cartModel';
 import Order from './orderModel';
 import DownloadToken from './tokenModel';
 
@@ -17,4 +17,4 @@ const initializeModels = async () => {
 
 initializeModels();
 
-export { User, Book, Cart, Order, DownloadToken };
+export { User, Book, Order, DownloadToken };

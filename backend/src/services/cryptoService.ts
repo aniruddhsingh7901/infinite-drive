@@ -27,13 +27,5 @@ export class CryptoService {
     }
   }
 
-//   getNetworkFee(currency: string): string {
-//     return CRYPTO_CONFIG[currency]?.networkFee || '0';
-//   }
 
-//   formatQRCode(currency: string, address: string, amount: string): string {
-//     const config = CRYPTO_CONFIG[currency];
-//     if (!config) throw new Error('Unsupported currency');
-//     return config.qrFormat(address, amount);
-//   }
 }

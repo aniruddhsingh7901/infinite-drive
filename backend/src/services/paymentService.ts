@@ -85,7 +85,31 @@ export class PaymentService {
         waitTime: '10-60 minutes',
         qrFormat: (address, amount) => `bitcoin:${address}?amount=${parseFloat(amount).toFixed(8)}`,
         explorerUrl: 'https://www.blockchain.com/btc/tx/'
+      },
+      LTC: {
+        name: 'Litecoin',
+        symbol: 'LTC',
+        address: process.env.LTC_ADDRESS || '',
+        decimals: 8,
+        minConfirmations: 6,
+        networkFee: '0.001 LTC',
+        waitTime: '10-30 minutes',
+        qrFormat: (address, amount) => `litecoin:${address}?amount=${parseFloat(amount).toFixed(8)}`,
+        explorerUrl: 'https://blockchair.com/litecoin/transaction/'
+      },
+
+      DOGE: {
+        name: 'Dogecoin',
+        symbol: 'DOGE',
+        address: process.env.DOGE_ADDRESS || '',
+        decimals: 8,
+        minConfirmations: 6,
+        networkFee: '1 DOGE',
+        waitTime: '10-30 minutes',
+        qrFormat: (address, amount) => `dogecoin:${address}?amount=${parseFloat(amount).toFixed(8)}`,
+        explorerUrl: 'https://dogechain.info/tx/'
       }
+      // Ot
       // Other currencies follow the same pattern
     };
   }
@@ -263,23 +287,7 @@ export class PaymentService {
     return this.supportedCurrencies[currency]?.explorerUrl + txHash;
   }
 
-  // async checkPayment(orderId: string): Promise<VerificationResult> {
-  //   try {
-  //     const order = await this.sequelize.models.Order.findByPk(orderId);
-  //     if (!order) {
-  //       throw new Error('Order not found');
-  //     }
 
-  //     return await this.verifyPayment(order.payment_address, order.paid_amount || 0, order.payment_currency);
-
-  //   } catch (error) {
-  //     console.error('Payment verification error:', error);
-  //     return {
-  //       verified: false,
-  //       message: error instanceof Error ? error.message : 'Payment verification failed'
-  //     };
-  //   }
-  // }
 }
 
 export default new PaymentService();

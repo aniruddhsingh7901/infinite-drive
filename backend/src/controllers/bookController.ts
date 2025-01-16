@@ -194,19 +194,6 @@ export const getBooks = async (req: Request, res: Response, next: NextFunction):
     }
 };
 
-// export const getBookById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-//     try {
-//         const { id } = req.params;
-//         const book = await Book.findByPk(id);
-//         if (!book) {
-//             res.status(404).json({ message: 'Book not found' });
-//             return;
-//         }
-//         res.status(200).json(book);
-//     } catch (error) {
-//         next(error);
-//     }
-// };
 
 export const getBookById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -284,9 +271,11 @@ export const getBookById = async (req: Request, res: Response, next: NextFunctio
 
 export const deleteBook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { id } = req.params;
+        const bookId = req.params.id as string;
+        console.log("🚀 ~ deleteBook ~ req.params:", req.params)
 
-        const book = await Book.findByPk(id);
+        const book = await Book.findOne({ where: { id : bookId} });
+         console.log("🚀 ~ deleteBook ~ book:", book)
         if (!book) {
             res.status(404).json({ message: 'Book not found' });
             return;

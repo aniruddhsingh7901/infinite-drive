@@ -7,6 +7,7 @@ import { CryptoService } from '../services/cryptoService';
 import { DownloadController } from './downloadController';
 import EmailService from '../services/emailService';
 import { PaymentService } from '../services/paymentService';
+import { orderStore } from '../services/orderStore';
 
 // Extend Express Request
 declare global {
@@ -70,6 +71,8 @@ export class PaymentController {
 
             // Register webhook with BlockCypher
             await this.blockchain.registerWebhook(payment_address, cryptocurrency, order.id);
+            orderStore.setCurrentOrderId(order.id);
+            // const order_id = order.id;
         //    console.log("🚀 ~ PaymentController ~ createPayment ~ data2:", data2)
 
             const paymentData = await this.payment.createPayment(
@@ -130,11 +133,8 @@ export class PaymentController {
             );
 
             if (verification.verified) {
-                const downloadToken = await this.handleSuccessfulPayment(order, {
-                    ...verification,
-                    completedAt: new Date(verification.timestamp || Date.now())
-                });
-
+                const downloadToken = await this.handleSuccessfulPayment(order)
+    
                 res.json({
                     success: true,
                     status: verification.status || 'completed',
@@ -163,7 +163,7 @@ export class PaymentController {
         }
     }
 
-    private async handleSuccessfulPayment(order: Order, verification: PaymentVerificationResult): Promise<string> {
+    private async handleSuccessfulPayment(order: Order): Promise<string> {
         try {
             const book = await Book.findByPk(order.bookId);
             if (!book) throw new Error('Book not found');
@@ -180,13 +180,13 @@ export class PaymentController {
             const downloadLink = `${process.env.API_URL}/download/${downloadToken}?format=${format}`;
 
             console.log("🚀 ~ handleSuccessfulPayment ~ downloadLink:", downloadLink);
-            // Update order
+          //Update order
             await Order.update({
-                status: 'completed',
+                // status: 'completed',
                 downloadToken,
                 downloadLink,
-                txHash: verification.txHash,
-                completedAt: new Date(verification.timestamp || Date.now())
+                // txHash: verification.txHash,
+                completedAt: new Date( Date.now())
             }, {
                 where: { id: order.id }
             });
@@ -198,7 +198,7 @@ export class PaymentController {
             Your download link (valid for 24 hours):
             ${format.toUpperCase()} Version: ${downloadLink}
             
-            Transaction Hash: ${verification.txHash}
+            Transaction Hash: ${order.txHash}
             
             Note: This link can only be used once.
         `;

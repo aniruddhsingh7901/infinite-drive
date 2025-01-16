@@ -17,6 +17,7 @@ import sequelize from './config/database';
 import './models'; // Import models to initialize them
 import bcrypt from 'bcrypt';
 import User from './models/userModel';
+import orderRoutes from './routes/orderRoutes';
 // Assuming you have a Token model
 
 const app = express();
@@ -32,17 +33,11 @@ const webSocketService = new WebSocketService(server);
 const blockCypherWebSocketService = new BlockCypherWebSocketService(webSocketService);
 
 app.use('/auth', authRoutes);
-// app.use('/cart', cartRoutes);
-// app.use('/order', orderRoutes);
 app.use('/payment', paymentRoutes);
 app.use('/webhooks', webhookRoutes);
 app.use('/books', bookRoutes);
-app.use('/download', express.static(path.join(__dirname, 'uploads', 'ebooks')));
-
-// Register download routes
+app.use('/orders', orderRoutes)
 app.use('/download', downloadRoutes);
-
-
 
 
 

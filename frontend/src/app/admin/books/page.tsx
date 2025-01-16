@@ -52,6 +52,7 @@ export default function BooksManagement() {
   };
 
   const handleDelete = async (id: string) => {
+    console.log("🚀 ~ handleDelete ~ id:", id)
     try {
       await axios.delete(`http://localhost:5000/books/${id}`);
       setBooks(books.filter(book => book.id !== id));
