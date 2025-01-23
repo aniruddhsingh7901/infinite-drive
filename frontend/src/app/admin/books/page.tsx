@@ -27,16 +27,29 @@ export default function BooksManagement() {
   });
   const [loading, setLoading] = useState(false);
 
+  // useEffect(() => {
+  //   const fetchBooks = async () => {
+  //     try {
+  //       const response = await axios.get('http://localhost:5000/books');
+  //       setBooks(response.data);
+  //     } catch (error) {
+  //       console.error('Error fetching books:', error);
+  //     }
+  //   };
+
+  //   fetchBooks();
+  // }, []);
+
   useEffect(() => {
     const fetchBooks = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/books');
+        const response = await axios.get<Book[]>('http://localhost:5000/api/books');
         setBooks(response.data);
       } catch (error) {
         console.error('Error fetching books:', error);
       }
     };
-
+  
     fetchBooks();
   }, []);
 
@@ -54,7 +67,8 @@ export default function BooksManagement() {
   const handleDelete = async (id: string) => {
     console.log("🚀 ~ handleDelete ~ id:", id)
     try {
-      await axios.delete(`http://localhost:5000/books/${id}`);
+      // await axios.delete(`http://localhost:5000/books/${id}`);
+      await axios.delete(`http://localhost:5000/api/books/${id}`);
       setBooks(books.filter(book => book.id !== id));
     } catch (error) {
       console.error('Error deleting book:', error);
@@ -64,16 +78,14 @@ export default function BooksManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBook) return;
-
+    
     setLoading(true);
-
     try {
-      const response = await axios.put(`http://localhost:5000/books/${editingBook.id}`, formData);
-      console.log('Book updated:', response.data);
+      const response = await axios.put<{book: Book}>(`http://localhost:5000/api/books/${editingBook.id}`, formData);
       setBooks(books.map(book => (book.id === editingBook.id ? response.data.book : book)));
       setEditingBook(null);
     } catch (error) {
-      console.error('Error updating book:', error);
+      console.error('Error:', error);
     } finally {
       setLoading(false);
     }

@@ -27,15 +27,34 @@ const upload = multer({
     limits: { fileSize: 100 * 1024 * 1024 } // 100MB
 });
 
-const uploadToCloudinary = (fileBuffer: Buffer, options: any): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(options, (error, result) => {
+// const uploadToCloudinary = (fileBuffer: Buffer, options: any): Promise<string> => {
+//     return new Promise((resolve, reject) => {
+//         const uploadStream = cloudinary.uploader.upload_stream(options, (error, result) => {
+//             if (error) reject(error);
+//             else resolve(result?.secure_url || '');
+//         });
+//         uploadStream.end(fileBuffer);
+//     });
+// };
+
+const uploadToCloudinary = async (fileBuffer: Buffer, options: any): Promise<string> => {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { ...options, timeout: 600000 },  // Increase timeout to 10 minutes
+          (error, result) => {
             if (error) reject(error);
             else resolve(result?.secure_url || '');
-        });
+          }
+        );
         uploadStream.end(fileBuffer);
-    });
-};
+      });
+      return result as string;
+    } catch (error) {
+      console.error('Cloudinary upload error:', error);
+      throw error;
+    }
+  };
 
 export const addBook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     upload.fields([
@@ -43,48 +62,43 @@ export const addBook = async (req: Request, res: Response, next: NextFunction): 
         { name: 'coverImage', maxCount: 1 }
     ])(req, res, async (err) => {
         if (err) {
+            console.error("Upload error:", err);
             return res.status(400).json({ error: err.message });
         }
-
+ 
         try {
-            const { bookId, title, description, price, formats } = req.body;
-            console.log("🚀 ~ ]) ~ req.body:", req.body)
+            console.log("Raw request body:", req.body);
+            console.log("Files received:", req.files);
+ 
+            const { title, description, price, formats } = req.body;
+            const bookId = `${Date.now()}-${formats.split(',')[0]}`;
             const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-
+ 
             if (!files?.ebooks?.[0] || !files?.coverImage?.[0]) {
                 return res.status(400).json({ error: 'Missing required files' });
             }
-
-            // Ensure formats is an array
-            const formatArray = typeof formats === 'string' ? formats.split(',') : [];
-
-            // Upload cover image
+ 
+            const formatArray = formats.split(',');
             const coverImage = await uploadToCloudinary(files.coverImage[0].buffer, {
                 folder: 'covers',
-                timeout: 300000, // 120 seconds
+                timeout: 300000,
                 public_id: `cover-${uuidv4()}`
             });
-
-            // Upload ebooks in parallel
+ 
             const filePaths: { [key: string]: string } = {};
-
             await Promise.all(files.ebooks.map(async (file, index) => {
                 const format = formatArray[index];
-                if (!format) {
-                    throw new Error('Format is missing for one of the ebooks');
-                }
-
-                // Determine folder based on format
+                if (!format) throw new Error('Format missing for ebook');
+                
                 const folder = format.toLowerCase() === 'pdf' ? 'ebooks/pdf' : 'ebooks/epub';
-
                 const result = await uploadToCloudinary(file.buffer, {
-                    folder: folder,
+                    folder,
                     resource_type: 'raw',
-                    timeout: 300000 // 120 seconds
+                    timeout: 300000
                 });
                 filePaths[format.toLowerCase()] = result;
             }));
-
+ 
             const book = await Book.create({
                 id: bookId,
                 title,
@@ -92,23 +106,18 @@ export const addBook = async (req: Request, res: Response, next: NextFunction): 
                 price: parseFloat(price),
                 formats: formatArray,
                 coverImagePaths: [coverImage],
-                filePaths: filePaths,
+                filePaths,
                 status: 'active'
             });
-
-            res.status(201).json({
-                message: 'Book added successfully',
-                book
-            });
-
+ 
+            res.status(201).json({ message: 'Book added successfully', book });
+ 
         } catch (error: any) {
             console.error('Error adding book:', error);
-            res.status(500).json({
-                error: error.message || 'Error uploading book'
-            });
+            res.status(500).json({ error: error.message || 'Error uploading book' });
         }
     });
-};
+ };
 
 export const updateBook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     upload.fields([{ name: 'ebooks', maxCount: 2 }, { name: 'coverImages', maxCount: 1 }])(req as any, res, async (err) => {
@@ -191,6 +200,12 @@ export const getBooks = async (req: Request, res: Response, next: NextFunction):
         res.status(200).json(books);
     } catch (error) {
         next(error);
+    }{ 
+    const { id } = req.params;
+    console.log('Params:', req.params);  // Add this line
+    
+    const book = await Book.findByPk(id);
+    console.log('Found book:', book); 
     }
 };
 
@@ -226,16 +241,6 @@ export const getBookById = async (req: Request, res: Response, next: NextFunctio
             res.status(404).json({
                 message: 'Book not found',
                 requestedId: id
-            });
-            return;
-        }
-
-        // Validate book data before sending
-        if (!book.formats || !book.coverImagePaths) {
-            console.error('Invalid book data:', book);
-            res.status(500).json({
-                message: 'Invalid book data structure',
-                details: 'Missing required fields'
             });
             return;
         }
@@ -287,4 +292,6 @@ export const deleteBook = async (req: Request, res: Response, next: NextFunction
     } catch (error) {
         next(error);
     }
+
+    
 };

@@ -295,13 +295,22 @@ export default function CheckoutPage() {
             
             <div className="space-y-4 mb-6">
               {items.map((item) => (
+                // <div key={item.id} className="flex justify-between">
+                //   <div>
+                //     <div className="font-medium">{item.title}</div>
+                //     <div className="text-sm text-gray-500">{item.format}</div>
+                //   </div>
+                //   <div className="font-medium">${item.price.toFixed(2)}</div>
+                // </div>
                 <div key={item.id} className="flex justify-between">
-                  <div>
-                    <div className="font-medium">{item.title}</div>
-                    <div className="text-sm text-gray-500">{item.format}</div>
-                  </div>
-                  <div className="font-medium">${item.price.toFixed(2)}</div>
-                </div>
+ <div>
+   <div className="font-medium">{item.title}</div>
+   <div className="text-sm text-gray-500">{item.format}</div>
+ </div>
+ <div className="font-medium">
+   ${typeof item.price === 'number' ? item.price.toFixed(2) : parseFloat(item.price).toFixed(2)}
+ </div>
+</div>
               ))}
             </div>
 
